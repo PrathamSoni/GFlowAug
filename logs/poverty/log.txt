@@ -1,0 +1,213 @@
+Dataset: poverty
+Algorithm: ERM
+Root dir: data
+Split scheme: official
+Dataset kwargs: {'no_nl': False, 'fold': 'A', 'use_ood_val': True}
+Download: False
+Frac: 1.0
+Version: None
+Unlabeled split: None
+Unlabeled version: None
+Use unlabeled y: False
+Loader kwargs: {'num_workers': 4, 'pin_memory': True}
+Unlabeled loader kwargs: {'num_workers': 8, 'pin_memory': True}
+Train loader: standard
+Uniform over groups: False
+Distinct groups: None
+N groups per batch: 8
+Unlabeled n groups per batch: 4
+Batch size: 64
+Unlabeled batch size: 64
+Eval loader: standard
+Gradient accumulation steps: 1
+Model: resnet18_ms
+Model kwargs: {'num_channels': 8}
+Noisystudent add dropout: None
+Noisystudent dropout rate: None
+Pretrained model path: None
+Load featurizer only: False
+Teacher model path: None
+Transform: poverty
+Additional train transform: None
+Target resolution: (224, 224)
+Resize scale: None
+Max token length: None
+Randaugment n: 2
+Loss function: mse
+Loss kwargs: {}
+Groupby fields: ['country']
+Group dro step size: None
+Coral penalty weight: 0.1
+Dann penalty weight: 0.1
+Dann classifier lr: 0.001
+Dann featurizer lr: 0.0001
+Dann discriminator lr: 0.001
+Afn penalty weight: None
+Safn delta r: None
+Hafn r: None
+Use hafn: False
+Irm lambda: 1.0
+Irm penalty anneal iters: None
+Self training lambda: None
+Self training threshold: None
+Pseudolabel t2: None
+Soft pseudolabels: False
+Algo log metric: mse
+Process pseudolabels function: pseudolabel_identity
+Val metric: r_wg
+Val metric decreasing: False
+N epochs: 200
+Optimizer: Adam
+Lr: 0.001
+Weight decay: 0.0
+Max grad norm: None
+Optimizer kwargs: {}
+Scheduler: StepLR
+Scheduler kwargs: {'gamma': 0.96, 'step_size': 1}
+Scheduler metric split: val
+Scheduler metric name: None
+Process outputs function: None
+Evaluate all splits: True
+Eval splits: []
+Eval only: False
+Eval epoch: None
+Device: cpu
+Seed: 0
+Log dir: ./logs/poverty
+Log every: 50
+Save step: None
+Save best: True
+Save last: True
+Save pred: True
+No group logging: False
+Progress bar: False
+Resume: False
+Use wandb: False
+Wandb api key path: None
+Wandb kwargs: {}
+Use data parallel: False
+
+Train data...
+    country = angola: n = 0
+    country = benin: n = 0
+    country = burkina_faso: n = 0
+    country = cameroon: n = 484
+    country = cote_d_ivoire: n = 0
+    country = democratic_republic_of_congo: n = 394
+    country = ethiopia: n = 0
+    country = ghana: n = 501
+    country = guinea: n = 0
+    country = kenya: n = 1535
+    country = lesotho: n = 658
+    country = malawi: n = 1614
+    country = mali: n = 0
+    country = mozambique: n = 741
+    country = nigeria: n = 1206
+    country = rwanda: n = 0
+    country = senegal: n = 488
+    country = sierra_leone: n = 0
+    country = tanzania: n = 0
+    country = togo: n = 274
+    country = uganda: n = 638
+    country = zambia: n = 586
+    country = zimbabwe: n = 678
+ID Val data...
+    country = angola: n = 0
+    country = benin: n = 0
+    country = burkina_faso: n = 0
+    country = cameroon: n = 45
+    country = cote_d_ivoire: n = 0
+    country = democratic_republic_of_congo: n = 49
+    country = ethiopia: n = 0
+    country = ghana: n = 59
+    country = guinea: n = 0
+    country = kenya: n = 141
+    country = lesotho: n = 66
+    country = malawi: n = 171
+    country = mali: n = 0
+    country = mozambique: n = 72
+    country = nigeria: n = 121
+    country = rwanda: n = 0
+    country = senegal: n = 47
+    country = sierra_leone: n = 0
+    country = tanzania: n = 0
+    country = togo: n = 32
+    country = uganda: n = 67
+    country = zambia: n = 63
+    country = zimbabwe: n = 67
+ID Test data...
+    country = angola: n = 0
+    country = benin: n = 0
+    country = burkina_faso: n = 0
+    country = cameroon: n = 47
+    country = cote_d_ivoire: n = 0
+    country = democratic_republic_of_congo: n = 49
+    country = ethiopia: n = 0
+    country = ghana: n = 54
+    country = guinea: n = 0
+    country = kenya: n = 154
+    country = lesotho: n = 70
+    country = malawi: n = 172
+    country = mali: n = 0
+    country = mozambique: n = 66
+    country = nigeria: n = 123
+    country = rwanda: n = 0
+    country = senegal: n = 50
+    country = sierra_leone: n = 0
+    country = tanzania: n = 0
+    country = togo: n = 24
+    country = uganda: n = 73
+    country = zambia: n = 70
+    country = zimbabwe: n = 48
+OOD Val data...
+    country = angola: n = 0
+    country = benin: n = 746
+    country = burkina_faso: n = 789
+    country = cameroon: n = 0
+    country = cote_d_ivoire: n = 0
+    country = democratic_republic_of_congo: n = 0
+    country = ethiopia: n = 0
+    country = ghana: n = 0
+    country = guinea: n = 300
+    country = kenya: n = 0
+    country = lesotho: n = 0
+    country = malawi: n = 0
+    country = mali: n = 0
+    country = mozambique: n = 0
+    country = nigeria: n = 0
+    country = rwanda: n = 0
+    country = senegal: n = 0
+    country = sierra_leone: n = 435
+    country = tanzania: n = 1639
+    country = togo: n = 0
+    country = uganda: n = 0
+    country = zambia: n = 0
+    country = zimbabwe: n = 0
+OOD Test data...
+    country = angola: n = 855
+    country = benin: n = 0
+    country = burkina_faso: n = 0
+    country = cameroon: n = 0
+    country = cote_d_ivoire: n = 341
+    country = democratic_republic_of_congo: n = 0
+    country = ethiopia: n = 1193
+    country = ghana: n = 0
+    country = guinea: n = 0
+    country = kenya: n = 0
+    country = lesotho: n = 0
+    country = malawi: n = 0
+    country = mali: n = 590
+    country = mozambique: n = 0
+    country = nigeria: n = 0
+    country = rwanda: n = 984
+    country = senegal: n = 0
+    country = sierra_leone: n = 0
+    country = tanzania: n = 0
+    country = togo: n = 0
+    country = uganda: n = 0
+    country = zambia: n = 0
+    country = zimbabwe: n = 0
+
+Epoch [0]:
+
+Train:
