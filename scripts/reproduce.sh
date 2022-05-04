@@ -1,4 +1,4 @@
-source activate pytorch_latest_p37
+conda activate pytorch_latest_p37
 pip install -r requirements.txt
 python setup.py install
 python examples/run_expt.py --dataset iwildcam --algorithm deepCORAL --root_dir data --log_dir ./logs/iwildcam --download true
