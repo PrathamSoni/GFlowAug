@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 import numpy as np
 import torch
 
+from utils import parse_bool
 from wilds import benchmark_datasets
 from wilds import get_dataset
 from wilds.datasets.wilds_dataset import WILDSDataset, WILDSSubset
@@ -50,7 +51,7 @@ def evaluate_all_benchmarks(predictions_dir: str, output_dir: str, root_dir: str
 
 
 def evaluate_benchmark(
-    dataset_name: str, predictions_dir: str, output_dir: str, root_dir: str
+    dataset_name: str, predictions_dir: str, output_dir: str, root_dir: str, suppress_replicates: bool = False
 ) -> Dict[str, Dict[str, float]]:
     """
     Evaluate across multiple replicates for a single benchmark.
@@ -60,22 +61,29 @@ def evaluate_benchmark(
         predictions_dir (str): Path to the directory with predictions. Can be a URL.
         output_dir (str): Output directory
         root_dir (str): The directory where datasets can be found
+        suppress_replicates (bool): Suppresses looking for leaderboard replicates
 
     Returns:
         Metrics as a dictionary with metrics as the keys and metric values as the values
     """
 
-    def get_replicates(dataset_name: str) -> List[str]:
+    def get_replicates(dataset_name: str, suppress_replicates: bool = False) -> List[str]:
         if dataset_name == "poverty":
-            return [f"fold:{fold}" for fold in ["A", "B", "C", "D", "E"]]
-        else:
-            if dataset_name == "camelyon17":
-                seeds = range(0, 10)
-            elif dataset_name == "civilcomments":
-                seeds = range(0, 5)
+            if suppress_replicates:
+                return ["fold:A"]
             else:
-                seeds = range(0, 3)
-            return [f"seed:{seed}" for seed in seeds]
+                return [f"fold:{fold}" for fold in ["A", "B", "C", "D", "E"]]
+        else:
+            if suppress_replicates:
+                return ["seed:0"]
+            else:
+                if dataset_name == "camelyon17":
+                    seeds = range(0, 10)
+                elif dataset_name == "civilcomments":
+                    seeds = range(0, 5)
+                else:
+                    seeds = range(0, 3)
+                return [f"seed:{seed}" for seed in seeds]
 
     def get_prediction_file(
         predictions_dir: str, dataset_name: str, split: str, replicate: str
@@ -123,7 +131,7 @@ def evaluate_benchmark(
         splits.remove("train")
 
     replicates_results: Dict[str, Dict[str, List[float]]] = dict()
-    replicates: List[str] = get_replicates(dataset_name)
+    replicates: List[str] = get_replicates(dataset_name, suppress_replicates=suppress_replicates)
     metrics: List[str] = get_metrics(dataset_name)
 
     # Store the results for each replicate
@@ -250,7 +258,11 @@ def is_path_url(path: str) -> bool:
 def main():
     if args.dataset:
         evaluate_benchmark(
-            args.dataset, args.predictions_dir, args.output_dir, args.root_dir
+            args.dataset,
+            args.predictions_dir,
+            args.output_dir,
+            args.root_dir,
+            suppress_replicates=args.suppress_replicates
         )
     else:
         print("A dataset was not specified. Evaluating for all WILDS datasets...")
@@ -283,6 +295,14 @@ if __name__ == "__main__":
         type=str,
         default="data",
         help="The directory where the datasets can be found (or should be downloaded to, if they do not exist).",
+    )
+    parser.add_argument(
+        '--suppress_replicates',
+        default=False,
+        type=parse_bool,
+        const=True,
+        nargs='?',
+        help='If true, only uses first replicate.',
     )
 
     # Parse args and run this script
