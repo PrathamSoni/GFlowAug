@@ -1,0 +1,18 @@
+{
+    "val": {
+        "detection_acc_avg_dom_std": NaN,
+        "detection_acc_avg_dom": 0.6899468377232552
+    },
+    "test": {
+        "detection_acc_avg_dom_std": NaN,
+        "detection_acc_avg_dom": 0.48874458315826597
+    },
+    "id_val": {
+        "detection_acc_avg_dom_std": NaN,
+        "detection_acc_avg_dom": 0.7750838862525092
+    },
+    "id_test": {
+        "detection_acc_avg_dom_std": NaN,
+        "detection_acc_avg_dom": 0.7741527424918281
+    }
+}
