@@ -160,7 +160,7 @@ if __name__ == "__main__":
     elif config.dataset == "poverty":
         n_channels = 8
         output_dim = 56
-    elif config.dataset == "globalwheat":
+    elif config.dataset == "iwildcam":
         n_channels = 3
         output_dim = 112
     else:
