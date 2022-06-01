@@ -72,7 +72,7 @@ class ImageGFN(pl.LightningModule):
         return None
 
     def likelihood(self, x, batch_idx):
-        x = torch.nn.functional.interpolate(x, scale_factor=.125)
+        x = torch.nn.functional.interpolate(x, size=32)
 
         batch_size, C, H, W = x.shape
         eps = 0.05
@@ -98,10 +98,12 @@ class ImageGFN(pl.LightningModule):
             inp = torch.cat([x_hat, vis, take], dim=1)
             mu, sigma, pi = self.feature_model(inp)  # k * t, k * t * t, k
             sigma *= torch.eye(self.step_size, device=self.device)  # Diagonal for now - think of workaround later
-            gmm = MixtureModel(mu, sigma, pi)
 
             x_true = x[selected_indices]  # ground truth
-            ll += gmm.density(x_true)
+            weighted_log_prob = torch.log(pi) + MultivariateNormal(loc=mu, covariance_matrix=sigma).log_prob(x_true)  # n * k
+            per_sample_score = torch.logsumexp(weighted_log_prob, dim=-1)  # n
+            density = per_sample_score.mean()
+            ll += density
 
             x_hat[selected_indices] = x_true
             vis[selected_indices] = 1

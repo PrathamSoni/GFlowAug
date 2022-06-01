@@ -156,13 +156,13 @@ if __name__ == "__main__":
 
     if config.dataset == "globalwheat":
         n_channels = 3
-        output_dim = 256
+        output_dim = 8
     elif config.dataset == "poverty":
         n_channels = 8
-        output_dim = 56
+        output_dim = 8
     elif config.dataset == "iwildcam":
         n_channels = 3
-        output_dim = 112
+        output_dim = 8
     else:
         n_channels = 1
         output_dim = 8
@@ -170,8 +170,7 @@ if __name__ == "__main__":
     model = ImageGFN(n_channels=n_channels, output_dim=output_dim, num_gaussians=8)
     wandb_logger = WandbLogger(project="gflow_images", log_model=True)
     trainer = pl.Trainer(
-        overfit_batches=10,
-        max_epochs=100,
+        max_epochs=config.n_epochs,
         logger=wandb_logger,
         devices=1,
         accelerator="cpu"
