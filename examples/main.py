@@ -174,7 +174,7 @@ if __name__ == "__main__":
         max_epochs=100,
         logger=wandb_logger,
         devices=1,
-        accelerator="cpu"
+        accelerator="gpu" if torch.cuda.is_available() else "cpu"
     )
 
     full_dataset = wilds.get_dataset(
