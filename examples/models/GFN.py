@@ -71,7 +71,7 @@ class ImageGFN(pl.LightningModule):
             mu, sigma, pi = self.feature_model(inp)  # k * t, k * t * t, k
             sigma *= torch.eye(self.step_size,
                                device=self.device)  # Diagonal for now - think of workaround later
-            x_sample = torch.mean(MultivariateNormal(loc=mu, covariance_matrix=sigma).sample(), dim=1)[0].reshape(
+            x_sample = torch.mean(MultivariateNormal(loc=mu, covariance_matrix=sigma).sample(), dim=1).reshape(
                 (batch_size, C, self.step_size))
             x_hat[:, :, selected_indices[2], selected_indices[3]] = x_sample
             vis[selected_indices] = 1
