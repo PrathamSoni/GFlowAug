@@ -394,7 +394,6 @@ def add_poverty_gflow_augment_transform(config, dataset, base_transform_steps):
     strong_transform_steps.extend([
         transforms.Lambda(lambda ms_img: poverty_color_jitter(ms_img)),
         transforms.Lambda(lambda ms_img: ms_cutout(ms_img)),
-        transforms.ToTensor(),
         model,
         transforms.Resize(target_resolution),
     ])
