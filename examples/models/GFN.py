@@ -28,32 +28,13 @@ class FeatureExtractor(nn.Module):
     def forward(self, x):
         z = self.model(x)
         a = self.n_channels * self.k * self.t
-        b = a + self.n_channels * self.k * self.t**2
+        b = a + self.n_channels * self.k * self.t ** 2
         mu = torch.reshape(z[..., :a], (-1, self.k, self.t))
         sigma = torch.reshape(z[..., a:b], (-1, self.k, self.t, self.t))
         sigma = torch.matmul(torch.transpose(sigma, -2, -1), sigma) / 2
         pi = torch.reshape(z[..., b:], (-1, self.k))
         pi = torch.softmax(pi, dim=-1)
         return mu, sigma, pi
-
-
-class MixtureModel(nn.Module):
-    def __init__(self, mu, sigma, pi):
-        super().__init__()
-        self.register_buffer('mu', mu)
-        self.register_buffer('sigma', sigma)
-        self.register_buffer('pi', pi)
-        self.dist = MultivariateNormal(loc=mu, covariance_matrix=sigma)
-
-    def density(self, x, per_sample=False):
-        """
-        :param x: n * t
-        :return:
-        """
-
-        weighted_log_prob = torch.log(self.get_buffer('pi')) + self.dist.log_prob(x)  # n * k
-        per_sample_score = torch.logsumexp(weighted_log_prob, dim=-1)  # n
-        return per_sample_score if per_sample else torch.mean(per_sample_score)
 
 
 class ImageGFN(pl.LightningModule):
@@ -64,12 +45,38 @@ class ImageGFN(pl.LightningModule):
         self.k = num_gaussians
         self.feature_model = FeatureExtractor(n_channels + 2, n_channels, self.step_size, self.k)
 
-    def forward(self):
+    def forward(self, x):
         """
         Sampling
         :return:
         """
-        return None
+        if len(x.shape)==3:
+            x = torch.unsqueeze(x, dim=0)
+        x = torch.nn.functional.interpolate(x, size=32)
+
+        batch_size, C, H, W = x.shape
+        eps = 0.05
+        p = torch.rand((batch_size, 1, 1, 1), device=self.device) * (1 - eps) + eps
+        vis = (torch.rand((batch_size, 1, H, W), device=self.device) > p).float()
+
+        x_hat = torch.masked_fill(x, vis == 0, -1)
+        num_left = int(torch.sum(vis == 0))
+        while num_left >= self.step_size:
+            selection = torch.randperm(num_left, device=self.device)[:self.step_size]
+            indices_left = torch.nonzero(vis == 0, as_tuple=True)
+            selected_indices = [row[selection] for row in indices_left]
+            take = torch.zeros(vis.shape, device=self.device)
+            take[selected_indices] = 1
+            inp = torch.cat([x_hat, vis, take], dim=1)
+            mu, sigma, pi = self.feature_model(inp)  # k * t, k * t * t, k
+            sigma *= torch.eye(self.step_size,
+                               device=self.device)  # Diagonal for now - think of workaround later
+            x_sample = torch.mean(MultivariateNormal(loc=mu, covariance_matrix=sigma).sample(), dim=1)[0].reshape(
+                (batch_size, C, self.step_size))
+            x_hat[:, :, selected_indices[2], selected_indices[3]] = x_sample
+            vis[selected_indices] = 1
+            num_left = int(torch.sum(vis == 0))
+        return x_hat.squeeze()
 
     def likelihood(self, x, batch_idx):
         x = torch.nn.functional.interpolate(x, size=32)
@@ -92,7 +99,8 @@ class ImageGFN(pl.LightningModule):
             sigma *= torch.eye(self.step_size, device=self.device)  # Diagonal for now - think of workaround later
 
             x_true = x[selected_indices]  # ground truth
-            weighted_log_prob = torch.log(pi) + MultivariateNormal(loc=mu, covariance_matrix=sigma).log_prob(x_true)  # n * k
+            weighted_log_prob = torch.log(pi) + MultivariateNormal(loc=mu, covariance_matrix=sigma).log_prob(
+                x_true)  # n * k
             per_sample_score = torch.logsumexp(weighted_log_prob, dim=-1)  # n
             density = per_sample_score.mean()
             ll += density
