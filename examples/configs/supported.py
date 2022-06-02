@@ -41,7 +41,7 @@ algorithms = ['ERM', 'groupDRO', 'deepCORAL', 'IRM', 'DANN', 'AFN', 'FixMatch', 
 
 # See transforms.py
 transforms = ['bert', 'image_base', 'image_resize', 'image_resize_and_center_crop', 'poverty',  'rxrx1']
-additional_transforms = ['randaugment', 'weak']
+additional_transforms = ['randaugment', 'weak', 'gflowaug']
 
 # See models/initializer.py
 models = ['resnet18_ms', 'resnet18', 'resnet34', 'resnet50', 'resnet101', 'wideresnet50',

@@ -73,23 +73,15 @@ class ImageGFN(pl.LightningModule):
 
     def likelihood(self, x, batch_idx):
         x = torch.nn.functional.interpolate(x, size=32)
-
         batch_size, C, H, W = x.shape
         eps = 0.05
         p = torch.rand((batch_size, 1, 1, 1), device=self.device) * (1 - eps) + eps
         vis = (torch.rand((batch_size, 1, H, W), device=self.device) > p).float()
 
         x_hat = torch.masked_fill(x, vis == 0, -1)
-        max_steps = C * H * W // self.step_size
         ll = 0
-
-        for i in range(max_steps):
-            num_left = int(torch.sum(vis == 0))
-
-            # for now we stop if we can't fill a full step. This should be changed.
-            if num_left <= self.step_size:
-                break
-
+        num_left = int(torch.sum(vis == 0))
+        while num_left >= self.step_size:
             selection = torch.randperm(num_left, device=self.device)[:self.step_size]
             indices_left = torch.nonzero(vis == 0, as_tuple=True)
             selected_indices = [row[selection] for row in indices_left]
@@ -107,6 +99,7 @@ class ImageGFN(pl.LightningModule):
 
             x_hat[selected_indices] = x_true
             vis[selected_indices] = 1
+            num_left = int(torch.sum(vis == 0))
 
         return ll
 
@@ -118,7 +111,7 @@ class ImageGFN(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         x, _, _ = batch
-        loss = self.likelihood(x, batch_idx)
+        loss = -self.likelihood(x, batch_idx)
         self.log('val_loss', loss)
 
     def configure_optimizers(self):

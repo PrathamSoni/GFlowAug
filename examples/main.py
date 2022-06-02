@@ -208,6 +208,7 @@ if __name__ == "__main__":
                 dataset=[full_dataset],
                 groupby_fields=config.groupby_fields
             )
+
     train_dataset = get_train_loader(
                     loader=config.train_loader,
                     dataset=train_dataset,
@@ -225,5 +226,4 @@ if __name__ == "__main__":
                     **config.loader_kwargs)
 
     trainer.fit(model=model, train_dataloaders=train_dataset, val_dataloaders=val_dataset)
-
     torch.save(model.state_dict(), os.path.join(config.log_dir, "model.pth"))
