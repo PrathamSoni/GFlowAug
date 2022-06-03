@@ -137,3 +137,5 @@ data
 **/figures
 **/wandb
 **/lightning_logs/
+**/gflow_images/
+.lr*
