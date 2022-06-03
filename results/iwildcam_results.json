@@ -1,0 +1,26 @@
+{
+    "val": {
+        "F1-macro_all_std": NaN,
+        "F1-macro_all": 0.39066197004630115,
+        "acc_avg_std": NaN,
+        "acc_avg": 0.5872601866722107
+    },
+    "test": {
+        "F1-macro_all_std": NaN,
+        "F1-macro_all": 0.32788374287494493,
+        "acc_avg_std": NaN,
+        "acc_avg": 0.7329344749450684
+    },
+    "id_val": {
+        "F1-macro_all_std": NaN,
+        "F1-macro_all": 0.5042413898884982,
+        "acc_avg_std": NaN,
+        "acc_avg": 0.8278643488883972
+    },
+    "id_test": {
+        "F1-macro_all_std": NaN,
+        "F1-macro_all": 0.4274951376963096,
+        "acc_avg_std": NaN,
+        "acc_avg": 0.7233259677886963
+    }
+}
