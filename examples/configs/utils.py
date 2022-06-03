@@ -58,12 +58,6 @@ def populate_defaults(config):
             )
 
     if config.dataset == 'globalwheat':
-        if config.additional_train_transform is not None:
-            raise ValueError(
-                f"Augmentations not supported for detection dataset: {config.dataset}."
-            )
-        config.additional_train_transform = ''
-
         if config.algorithm == "NoisyStudent":
             if config.process_pseudolabels_function is None:
                 config.process_pseudolabels_function = 'pseudolabel_detection'

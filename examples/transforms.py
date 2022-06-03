@@ -6,9 +6,9 @@ import torch
 import torchvision.transforms as transforms
 import torchvision.transforms.functional as TF
 from transformers import BertTokenizerFast, DistilBertTokenizerFast
-
+from models.GFN import ImageGFN
 from data_augmentation.randaugment import FIX_MATCH_AUGMENTATION_POOL, RandAugment
-
+import os
 
 _DEFAULT_IMAGE_TENSOR_NORMALIZATION_MEAN = [0.485, 0.456, 0.406]
 _DEFAULT_IMAGE_TENSOR_NORMALIZATION_STD = [0.229, 0.224, 0.225]
@@ -74,6 +74,15 @@ def initialize_transform(
         transform = add_weak_transform(
             config, dataset, transform_steps, normalize, default_normalization
         )
+    elif additional_transform_name == "gflowaug":
+        if transform_name == 'poverty':
+            transform = add_poverty_gflow_augment_transform(
+                config, dataset, transform_steps
+            )
+        else:
+            transform = add_gflow_augment_transform(
+                config, dataset, transform_steps, default_normalization
+            )
     else:
         if transform_name != "poverty":
             # The poverty data is already a tensor at this point
@@ -243,6 +252,37 @@ def add_rand_augment_transform(config, dataset, base_transform_steps, normalizat
     )
     return transforms.Compose(strong_transform_steps)
 
+
+def add_gflow_augment_transform(config, dataset, base_transform_steps, normalization):
+    strong_transform_steps = copy.deepcopy(base_transform_steps)
+    if config.dataset == "globalwheat":
+        n_channels = 3
+        output_dim = 8
+    elif config.dataset == "poverty":
+        n_channels = 8
+        output_dim = 8
+    elif config.dataset == "iwildcam":
+        n_channels = 3
+        output_dim = 8
+    else:
+        n_channels = 1
+        output_dim = 8
+    model = ImageGFN(n_channels=n_channels, output_dim=output_dim, num_gaussians=8)
+    state_dict = torch.load(os.path.join(config.log_dir, "model.pth"))
+    model.load_state_dict(state_dict)
+    model.eval()
+
+    target_resolution = _get_target_resolution(config, dataset)
+    strong_transform_steps.extend(
+        [
+            transforms.ToTensor(),
+            normalization,
+            model,
+            transforms.Resize(target_resolution),
+        ]
+    )
+    return transforms.Compose(strong_transform_steps)
+
 def poverty_rgb_color_transform(ms_img, transform):
     from wilds.datasets.poverty_dataset import _MEANS_2009_17, _STD_DEVS_2009_17
     poverty_rgb_means = np.array([_MEANS_2009_17[c] for c in ['RED', 'GREEN', 'BLUE']]).reshape((-1, 1, 1))
@@ -302,6 +342,60 @@ def add_poverty_rand_augment_transform(config, dataset, base_transform_steps):
         transforms.Lambda(lambda ms_img: poverty_color_jitter(ms_img)),
         transforms.Lambda(lambda ms_img: ms_cutout(ms_img)),
         # transforms.Lambda(lambda ms_img: viz(ms_img)),
+    ])
+
+    return transforms.Compose(strong_transform_steps)
+
+def add_poverty_gflow_augment_transform(config, dataset, base_transform_steps):
+    def poverty_color_jitter(ms_img):
+        return poverty_rgb_color_transform(
+            ms_img,
+            transforms.ColorJitter(brightness=0.8, contrast=0.8, saturation=0.8, hue=0.1))
+
+    def ms_cutout(ms_img):
+        def _sample_uniform(a, b):
+            return torch.empty(1).uniform_(a, b).item()
+
+        assert ms_img.shape[1] == ms_img.shape[2]
+        img_width = ms_img.shape[1]
+        cutout_width = _sample_uniform(0, img_width/2)
+        cutout_center_x = _sample_uniform(0, img_width)
+        cutout_center_y = _sample_uniform(0, img_width)
+        x0 = int(max(0, cutout_center_x - cutout_width/2))
+        y0 = int(max(0, cutout_center_y - cutout_width/2))
+        x1 = int(min(img_width, cutout_center_x + cutout_width/2))
+        y1 = int(min(img_width, cutout_center_y + cutout_width/2))
+
+        # Fill with 0 because the data is already normalized to mean zero
+        ms_img[:, x0:x1, y0:y1] = 0
+        return ms_img
+
+    target_resolution = _get_target_resolution(config, dataset)
+    strong_transform_steps = copy.deepcopy(base_transform_steps)
+
+    if config.dataset == "globalwheat":
+        n_channels = 3
+        output_dim = 8
+    elif config.dataset == "poverty":
+        n_channels = 8
+        output_dim = 8
+    elif config.dataset == "iwildcam":
+        n_channels = 3
+        output_dim = 8
+    else:
+        n_channels = 1
+        output_dim = 8
+    model = ImageGFN(n_channels=n_channels, output_dim=output_dim, num_gaussians=8)
+    state_dict = torch.load(os.path.join(config.log_dir, "model.pth"))
+    model.load_state_dict(state_dict)
+    model.eval()
+
+    target_resolution = _get_target_resolution(config, dataset)
+    strong_transform_steps.extend([
+        transforms.Lambda(lambda ms_img: poverty_color_jitter(ms_img)),
+        transforms.Lambda(lambda ms_img: ms_cutout(ms_img)),
+        model,
+        transforms.Resize(target_resolution),
     ])
 
     return transforms.Compose(strong_transform_steps)
