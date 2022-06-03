@@ -45,7 +45,7 @@ class FeatureExtractor(nn.Module):
         pi = torch.softmax(pi, dim=-1)
         return mu, sigma, pi
 
-class WaveletFeatureModel(nn.Module):
+class WaveletFeatureExtractor(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_channels, n_layers, k, t, act=nn.LeakyReLU()):
         super().__init__()
         layers = [nn.Linear(input_dim, hidden_dim), act]
@@ -114,7 +114,7 @@ class ImageGFN(pl.LightningModule):
             dummy_stack = stack_wavedec(yl, yh)
             self.y_len = dummy_stack.shape[-1]
 
-            self.feature_model = WaveletFeatureModel(self.y_len, 1024, self.n_channels, 5, self.k, self.step_size)
+            self.feature_model = WaveletFeatureExtractor(self.y_len, 1024, self.n_channels, 5, self.k, self.step_size)
         else:
             self.feature_model = FeatureExtractor(img_dim, n_channels + 2, n_channels, self.step_size, self.k)
 
@@ -182,6 +182,7 @@ class ImageGFN(pl.LightningModule):
         return take, selected_indices
 
     def wavelet_likelihood(self, x, batch_idx):
+        #x = x * 2 - 1
         yl, yh = self.ffm(x)
         y = stack_wavedec(yl, yh)
 
@@ -194,6 +195,7 @@ class ImageGFN(pl.LightningModule):
         y_hat = torch.masked_fill(y, vis == 0, -1)
         max_steps = (2 * self.y_len) // self.step_size
         ll = 0
+        breakpoint()
 
         for i in range(max_steps):
             num_left = int(torch.sum(vis == 0))
