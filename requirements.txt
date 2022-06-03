@@ -1,3 +1,4 @@
 transformers
 wandb
 pytorch-lightning
+jupyter
