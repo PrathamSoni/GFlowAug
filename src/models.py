@@ -3,9 +3,14 @@ import pytorch_lightning as pl
 from torch import nn
 import torch.nn.functional as F
 from torch.distributions import MultivariateNormal
-import pywt
+from pytorch_wavelets import DWTForward, DWTInverse
+import math
 
-torch.manual_seed(241)
+def stack_wavedec(yl, yh):
+    n, c = yl.shape[0], yl.shape[1]
+    lis = [yl.view(n, c, -1)] + [e.view(n, c, -1) for e in yh]
+    stack = torch.cat(lis, dim=-1)
+    return stack
 
 class FeatureExtractor(nn.Module):
     def __init__(self, img_dim, input_channels, output_channels, t, k, act=nn.LeakyReLU(), pool=nn.MaxPool2d(kernel_size=2, stride=2)):
@@ -30,6 +35,29 @@ class FeatureExtractor(nn.Module):
         self.k = k
         self.t = t
         self.n_channels = output_channels
+
+    def forward(self, x):
+        z = self.model(x)
+        mu = torch.reshape(z[..., :self.k * self.t], (-1, self.k, self.t))
+        sigma = torch.reshape(z[..., self.k * self.t:-self.k], (-1, self.k, self.t, self.t))
+        sigma = torch.matmul(torch.transpose(sigma, -2, -1), sigma) / 2
+        pi = torch.reshape(z[..., -self.k:], (-1, self.k))
+        pi = torch.softmax(pi, dim=-1)
+        return mu, sigma, pi
+
+class WaveletFeatureModel(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_channels, n_layers, k, t, act=nn.LeakyReLU()):
+        super().__init__()
+        layers = [nn.Linear(input_dim, hidden_dim), act]
+
+        for i in range(n_layers):
+            layers.append(nn.Linear(hidden_dim, hidden_dim))
+            layers.append(act)
+
+        layers.append(nn.Linear(hidden_dim, output_channels * k * (t * t + t + 1)))
+        self.model = nn.Sequential(*layers)
+        self.k = k
+        self.t = t
 
     def forward(self, x):
         z = self.model(x)
@@ -67,64 +95,76 @@ class MixtureModel(nn.Module):
         return samples
 
 class ImageGFN(pl.LightningModule):
-    def __init__(self, n_channels, img_dim, output_dim, num_gaussians, lr=1e-3, uniform_PB=True):
+    def __init__(self, n_channels, img_dim, output_dim, num_gaussians, lr=1e-3, wavelet=False):
         super().__init__()
-        self.uniform_PB = uniform_PB
-        self.step_size = output_dim
         self.img_dim = img_dim
+        self.step_size = output_dim
         self.k = num_gaussians
         self.n_channels = n_channels
-        self.feature_model = FeatureExtractor(img_dim, n_channels + 2, n_channels, self.step_size, self.k)
+        self.wavelet = wavelet
+
+        if wavelet:
+            self.max_level = int(math.log2(self.img_dim))
+            self.ffm = DWTForward(J=self.max_level, wave='haar')
+            self.ifm = DWTInverse(wave='haar')
+
+            yl, yh = self.ffm(torch.zeros((1, 1, img_dim, img_dim)))
+            self.y_sizes = [len(yl.flatten())] + [len(e.flatten()) for e in yh]
+            self.wave_sizes = [yl.shape] + [e.shape for e in yh]
+            dummy_stack = stack_wavedec(yl, yh)
+            self.y_len = dummy_stack.shape[-1]
+
+            self.feature_model = WaveletFeatureModel(self.y_len, 1024, self.n_channels, 5, self.k, self.step_size)
+        else:
+            self.feature_model = FeatureExtractor(img_dim, n_channels + 2, n_channels, self.step_size, self.k)
+
         self.lr = lr
         self.save_hyperparameters()
+
+    def unstack_wavedec(self, y):
+        ys = torch.split(y, self.y_sizes, dim=-1)
+        ys = [e.view(self.wave_sizes[i]) for i, e in enumerate(ys)]
+        return self.ifm((ys[0], ys[1:]))
 
     def forward(self):
         """
         Sampling
         :return:
         """
-        out = torch.zeros((1, self.n_channels, self.img_dim, self.img_dim), device=self.device)
-        vis = torch.zeros((1, 1, self.img_dim, self.img_dim), device=self.device)
+        if self.wavelet:
+            out = torch.zeros((1, self.n_channels, self.y_len), device=self.device)
+            vis = torch.zeros((1, 1, self.y_len), device=self.device)
+        else:
+            out = torch.zeros((1, self.n_channels, self.img_dim, self.img_dim), device=self.device)
+            vis = torch.zeros((1, 1, self.img_dim, self.img_dim), device=self.device)
+
         indices = torch.nonzero(vis == 0, as_tuple=True)
-        order = torch.randperm(self.img_dim * self.img_dim, device=self.device)
+        order = torch.randperm(len(vis.flatten()), device=self.device)
 
         if len(order) % self.step_size != 0:
             pad_length = self.step_size - (len(order) % self.step_size) # in case we can't evenly divide, add from the beginning again
             order = torch.cat([order, order[:pad_length]])
 
         order = order.view((-1, self.step_size))
+        selected_indices = [dim[order[i]] for dim in indices for i in range(order.shape[0])]
 
         for i in range(order.shape[0]):
-            selected_indices = [dim[order[i]] for dim in indices]
             take = torch.zeros(vis.shape, device=self.device)
-            take[selected_indices] = 1
+            take[selected_indices[i]] = 1
             img = torch.cat([out, vis, take], dim=1)
             mu, sigma, pi = self.feature_model(img)
             sigma *= torch.eye(self.step_size, device=self.device)
             gmm = MixtureModel(mu, sigma, pi)
-            out[selected_indices] = gmm(1).squeeze(0)
-            vis[selected_indices] = 1
+            out[selected_indices[i]] = gmm(1).squeeze(0)
+            vis[selected_indices[i]] = 1
+
+        if self.wavelet:
+            out = self.unstack_wavedec(out)
 
         return (out.squeeze(0) + 1) * 0.5
 
-    def likelihood(self, x, batch_idx):
-        x = x * 2 - 1
-
-        batch_size = x.shape[0]
-        eps = self.step_size / (self.img_dim * self.img_dim)
-        p = torch.rand((batch_size, 1, 1, 1), device=self.device) * (1 - eps) + eps
-        vis = (torch.rand((batch_size, 1, self.img_dim, self.img_dim), device=self.device) > p).float()
-
-        x_hat = torch.masked_fill(x, vis == 0, -1)
-        max_steps = (2 * self.img_dim * self.img_dim) // self.step_size
-        ll = 0
-
-        for i in range(max_steps):
-            num_left = int(torch.sum(vis == 0))
-
-            if num_left == 0:
-                break
-
+    def training_take(self, vis, num_left):
+        with torch.no_grad():
             selection = torch.randperm(num_left, device=self.device)[:self.step_size]
             indices_left = torch.nonzero(vis == 0, as_tuple=True)
             selected_indices = [row[selection] for row in indices_left]
@@ -139,6 +179,62 @@ class ImageGFN(pl.LightningModule):
             take = torch.zeros(vis.shape, device=self.device)
             take[selected_indices] = 1
 
+        return take, selected_indices
+
+    def wavelet_likelihood(self, x, batch_idx):
+        yl, yh = self.ffm(x)
+        y = stack_wavedec(yl, yh)
+
+        with torch.no_grad():
+            batch_size = x.shape[0]
+            eps = self.step_size / self.y_len
+            p = torch.rand((batch_size, 1, 1), device=self.device) * (1 - eps) + eps
+            vis = (torch.rand((batch_size, 1, self.y_len), device=self.device) > p).float()
+
+        y_hat = torch.masked_fill(y, vis == 0, -1)
+        max_steps = (2 * self.y_len) // self.step_size
+        ll = 0
+
+        for i in range(max_steps):
+            num_left = int(torch.sum(vis == 0))
+
+            if num_left == 0:
+                break
+
+            take, selected_indices = self.training_take(vis, num_left)
+            inp = torch.cat([y_hat, vis, take], dim=1)
+            mu, sigma, pi = self.feature_model(inp)
+            sigma *= torch.eye(self.step_size, device=self.device)  # Diagonal for now - think of workaround later
+            gmm = MixtureModel(mu, sigma, pi)
+
+            y_true = y[selected_indices]  # ground truth
+            ll += gmm.density(y_true)
+
+            y_hat[selected_indices] = y_true
+            vis[selected_indices] = 1
+
+        return -ll
+
+    def likelihood(self, x, batch_idx):
+        x = x * 2 - 1
+
+        with torch.no_grad():
+            batch_size = x.shape[0]
+            eps = self.step_size / (self.img_dim * self.img_dim)
+            p = torch.rand((batch_size, 1, 1, 1), device=self.device) * (1 - eps) + eps
+            vis = (torch.rand((batch_size, 1, self.img_dim, self.img_dim), device=self.device) > p).float()
+
+        x_hat = torch.masked_fill(x, vis == 0, -1)
+        max_steps = (2 * self.img_dim * self.img_dim) // self.step_size
+        ll = 0
+
+        for i in range(max_steps):
+            num_left = int(torch.sum(vis == 0))
+
+            if num_left == 0:
+                break
+
+            take, selected_indices = self.training_take(vis, num_left)
             inp = torch.cat([x_hat, vis, take], dim=1)
             mu, sigma, pi = self.feature_model(inp)  # k * t, k * t * t, k
             sigma *= torch.eye(self.step_size, device=self.device)  # Diagonal for now - think of workaround later
@@ -154,7 +250,7 @@ class ImageGFN(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         x, _ = batch
-        loss = self.likelihood(x, batch_idx)
+        loss = self.wavelet_likelihood(x, batch_idx) if self.wavelet else self.likelihood(x, batch_idx)
 
         if loss is None:
             return None
@@ -172,47 +268,9 @@ class ImageGFN(pl.LightningModule):
 
     def configure_optimizers(self):
         optim = torch.optim.Adam(self.parameters(), lr=self.lr)
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, patience=2)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, patience=10)
         return {
             "optimizer": optim,
             "lr_scheduler": scheduler,
             "monitor": "train_loss"
         }
-
-        # loss_TB = torch.zeros(batch_size)
-        # dones = torch.full(batch_size, False)
-        # states = torch.zeros((batch_size, self.h_dim))
-        # visited = torch.full((batch_size, self.h_dim), False)
-        # actions = None
-        #
-        # max_steps = 1e8
-        #
-        # for i in range(max_steps):
-        #     if torch.all(dones):
-        #         break
-        #
-        #     non_terminal_states = states[~dones]
-        #     current_batch_size = non_terminal_states.shape[0]
-        #     logits = self.model(non_terminal_states)
-        #     PB_logits, PF_logits = torch.chunk(logits, 2)
-        #
-        #     # Backward Policy
-        #     if self.uniform_PB:
-        #         PB_logits *= 0
-        #
-        #     log_PB = -torch.log_softmax(torch.masked_fill(PB_logits, non_terminal_states == 0, -torch.inf), dim=1)
-        #
-        #     if actions is not None:
-        #         loss_TB[~dones] += torch.gather(log_PB, dim=1, index=actions[actions != self.h_dim].unsqueeze(1)).squeeze(1)
-        #
-        #     # Forward Policy
-        #     log_PF = -torch.log_softmax(torch.masked_fill(PF_logits, visited, -torch.inf), dim=1)
-        #     tau = 1
-        #     sample_probs = torch.softmax(log_PF / tau, dim=-1)
-        #     actions = torch.multinomial(sample_probs, 1)
-        #     loss_TB[~dones] += torch.gather(log_PF, dim=1, index=actions).squeeze(1)
-        #
-        #     # Terminate states
-        #     terminates = None
-        #
-        #     dones[~dones] |= terminates

@@ -1,12 +1,13 @@
+import numpy as np
 from torchvision.datasets import MNIST
 from torchvision.transforms import *
 import matplotlib.pyplot as plt
 import torch
-import pywt
 from models import ImageGFN
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
-from torch.utils.data import DataLoader
+from pytorch_lightning.callbacks import LearningRateMonitor
+from torch.utils.data import DataLoader, Subset
 import wandb
 
 # CHANGE API KEY
@@ -14,18 +15,29 @@ wandb.login(key='e9d0f0abd4a0b92aa26694bdecd67aa7d57b76d6')
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 data = MNIST(root='./datasets/MNIST', train=True, download=True, transform=ToTensor())
-train_loader = DataLoader(data, batch_size=2, num_workers=4)
+train_data = Subset(data, list(np.random.choice(60000, 5000, replace=False)))
+train_loader = DataLoader(train_data, batch_size=1, num_workers=4)
 
-model = ImageGFN(n_channels=1, img_dim=28, output_dim=8, num_gaussians=8, lr=8*1e-3)
+model = ImageGFN(
+    n_channels=1,
+    img_dim=28,
+    output_dim=48,
+    num_gaussians=96,
+    lr=8*1e-3,
+    wavelet=False
+)
 wandb_logger = WandbLogger(project="gflow_images", log_model=True)
+lr_monitor = LearningRateMonitor(logging_interval='epoch')
 trainer = pl.Trainer(
     overfit_batches=10,
     max_epochs=100,
     logger=wandb_logger,
     accelerator="gpu",
     auto_lr_find='lr',
-    gradient_clip_val=0.9,
-    gradient_clip_algorithm="norm"
+    # gradient_clip_val=0.9,
+    # gradient_clip_algorithm="norm",
+    accumulate_grad_batches=2,
+    callbacks=[lr_monitor]
 )
 trainer.fit(model=model, train_dataloaders=train_loader)
 x = model().cpu().numpy()
