@@ -24,7 +24,7 @@ model = ImageGFN(
     output_dim=48,
     num_gaussians=96,
     lr=8*1e-3,
-    wavelet=False
+    wavelet=True
 )
 wandb_logger = WandbLogger(project="gflow_images", log_model=True)
 lr_monitor = LearningRateMonitor(logging_interval='epoch')
